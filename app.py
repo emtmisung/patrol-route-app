@@ -12,9 +12,8 @@ from streamlit_folium import st_folium
 # ----------------------------------------------------------------------------
 st.set_page_config(page_title="AI 순찰노선 최적화", layout="wide")
 
-GEOCODE_URL = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode"
-DIRECTIONS_URL = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
-
+GEOCODE_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
+DIRECTIONS_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
 NCP_KEY_ID = st.secrets.get("NCP_CLIENT_ID", "")
 NCP_KEY = st.secrets.get("NCP_CLIENT_SECRET", "")
 
@@ -414,4 +413,5 @@ if "route_results" in st.session_state:
     st.caption(
         "⚠️ 이 페이지의 API 키는 서버(Secrets)에만 저장되며 브라우저로 노출되지 않습니다. "
         "실제 도로거리·소요시간은 NCP Directions5 실시간 계산 결과입니다."
+        
     )
