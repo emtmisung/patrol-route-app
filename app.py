@@ -1,3 +1,4 @@
+import io
 import math
 import time
 
@@ -10,7 +11,7 @@ from streamlit_folium import st_folium
 # ----------------------------------------------------------------------------
 # 기본 설정
 # ----------------------------------------------------------------------------
-st.set_page_config(page_title="AI 순찰노선 최적화", layout="wide")
+st.set_page_config(page_title="파세루 오리진 (FireSafe Route Origin)", page_icon="🚒", layout="wide")
 
 GEOCODE_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
 DIRECTIONS_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
@@ -177,10 +178,53 @@ def separate_long_distance(points, station, threshold_km, on_call=None):
 
 
 # ----------------------------------------------------------------------------
-# UI
+# UI — 파세루 데모(claude.ai 프로토타입)와 같은 카드+칩 스타일로 구성
 # ----------------------------------------------------------------------------
-st.title("🚒 AI 순찰노선 최적화")
-st.caption("주소 목록을 업로드하면 실제 도로거리 기준으로 순찰노선을 자동 편성합니다.")
+PASERU_CSS = """
+<style>
+:root{
+  --accent:#c23c2c; --accent-soft:#f4ddd8; --line:#d7ddd2; --surface:#ffffff; --bg:#f1f4f0;
+}
+.stApp{ background: var(--bg); }
+h1, h2, h3 { font-weight: 800 !important; }
+[data-testid="stTitle"], h1 { color:#1c2420; }
+/* 카드 컨테이너(border=True) 스타일 */
+div[data-testid="stVerticalBlockBorderWrapper"]{
+  background: var(--surface);
+  border-radius: 14px !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 1px 2px rgba(28,36,32,.06), 0 8px 24px -12px rgba(28,36,32,.18);
+  padding: 4px 6px;
+}
+/* pills(칩) 선택 위젯을 카드형 버튼처럼 */
+div[data-testid="stPills"] label{
+  border-radius: 10px !important;
+}
+/* 기본 버튼(노선 생성하기)을 브랜드 레드로 강조 */
+div.stButton > button, div.stFormSubmitter > button, .stDownloadButton > button{
+  background-color: var(--accent) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  padding: 0.7em 1em !important;
+}
+div.stButton > button:hover, .stDownloadButton > button:hover{
+  background-color: #a32f22 !important;
+  color: #fff !important;
+}
+/* 헤더 아이콘 뱃지 느낌 */
+.paseru-eyebrow{
+  font-family: monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: 2px;
+}
+</style>
+"""
+st.markdown(PASERU_CSS, unsafe_allow_html=True)
+
+st.markdown('<div class="paseru-eyebrow">성주소방서 · 119재난대응과 · 실동 버전</div>', unsafe_allow_html=True)
+st.title("🚒 파세루 오리진 (FireSafe Route Origin)")
+st.caption("주소 목록과 순찰 조건만 넣으면, 실도로 기준(NCP Geocoding · Directions5 실연동)으로 노선을 자동 편성합니다.")
 
 if not has_keys():
     st.error(
@@ -189,20 +233,36 @@ if not has_keys():
         "NCP_CLIENT_ID / NCP_CLIENT_SECRET 값을 등록해주세요."
     )
 
-with st.sidebar:
-    st.header("① 출발점(소방서) 설정")
-    station_name = st.text_input("이름", value="성주소방서")
-    station_address = st.text_input("주소", value="경상북도 성주군 성주읍 주산로 193")
+with st.container(border=True):
+    st.markdown("##### 0 · 출발·복귀 기준점(소방서·센터)")
+    c1, c2 = st.columns(2)
+    with c1:
+        station_name = st.text_input("이름", value="성주소방서")
+    with c2:
+        station_address = st.text_input("주소", value="경상북도 성주군 성주읍 주산로 193")
 
-    st.header("② 순찰 기준 설정")
-    mode_label = st.radio("기준 방식", ["구간별 제한", "노선 전체 목표시간"])
+st.write("")
+
+with st.container(border=True):
+    st.markdown("##### 1 · 노선 조건 설정")
+
+    st.markdown("**가. 기준 방식**")
+    mode_label = st.pills("기준 방식", ["구간별 제한", "노선 전체 목표시간"],
+                           default="구간별 제한", label_visibility="collapsed")
     mode = "segment" if mode_label == "구간별 제한" else "target_time"
 
-    max_per_route = st.number_input("노선당 최대 대상 수", min_value=1, max_value=30, value=4)
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        max_per_route = st.number_input("노선당 최대 대상 수", min_value=1, max_value=30, value=4)
+    with cc2:
+        max_routes_cap = st.number_input("전체 노선 개수 상한(0=무제한)", min_value=0, value=0)
 
     if mode == "segment":
-        seg_max_km = st.number_input("구간당 최대 거리(km)", min_value=1.0, value=7.0, step=0.5)
-        seg_max_min = st.number_input("구간당 최대 시간(분)", min_value=1, value=10)
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            seg_max_km = st.number_input("구간당 최대 거리(km)", min_value=1.0, value=7.0, step=0.5)
+        with sc2:
+            seg_max_min = st.number_input("구간당 최대 시간(분)", min_value=1, value=10)
         target_min = target_min_low = target_min_high = None
     else:
         target_min = st.number_input("목표 왕복시간(분)", min_value=10, value=60)
@@ -211,15 +271,15 @@ with st.sidebar:
         target_min_high = target_min + allow_range
         seg_max_km = seg_max_min = None
 
-    max_routes_cap = st.number_input("전체 노선 개수 상한(0=무제한)", min_value=0, value=0)
-
-    st.header("③ 장거리 분리 기준")
+    st.markdown("**나. 장거리 분리 기준**")
     long_threshold = st.number_input("소방서 실제 도로거리(km) 초과 시 별도 표시", min_value=1.0, value=15.0)
 
-st.subheader("주소 파일 업로드")
-uploaded = st.file_uploader("CSV 또는 Excel 파일 (주소 컬럼 포함)", type=["csv", "xlsx", "xls"])
+st.write("")
 
-use_sample = st.checkbox("샘플 데이터로 테스트 (성주읍·월항면 마을회관 30개소)", value=uploaded is None)
+with st.container(border=True):
+    st.markdown("##### 2 · 대상 목록 업로드")
+    uploaded = st.file_uploader("CSV 또는 Excel 파일 (주소 컬럼 포함)", type=["csv", "xlsx", "xls"])
+    use_sample = st.checkbox("샘플 데이터로 테스트 (성주읍·월항면 마을회관 30개소)", value=uploaded is None)
 
 df = None
 if uploaded is not None:
@@ -228,24 +288,33 @@ if uploaded is not None:
     else:
         df = pd.read_excel(uploaded)
 elif use_sample:
-    df = pd.read_csv("sample_data/seongju_30_villages.csv")
+    df = pd.read_csv("seongju_patrol_coordinates_updated_modified.csv")
+    # 이 샘플 파일의 연번 0행은 출발점(성주소방서) 자신이므로 순찰 대상 목록에서 제외
+    if "연번" in df.columns:
+        df = df[df["연번"] != 0].reset_index(drop=True)
 
 if df is not None:
-    st.write("업로드된 데이터 미리보기")
-    st.dataframe(df.head(10), use_container_width=True)
+    st.write("")
+    with st.container(border=True):
+        st.markdown("##### 3 · 업로드된 데이터 미리보기 · 노선 생성")
+        st.dataframe(df.head(10), use_container_width=True)
 
-    cols = list(df.columns)
-    name_col = st.selectbox("이름(주소지) 컬럼", cols, index=0)
-    addr_col = st.selectbox(
-        "지오코딩에 사용할 주소 컬럼", cols, index=min(3, len(cols) - 1)
-    )
-    lat_col_guess = next((c for c in cols if "위도" in c or c.lower() == "lat"), None)
-    lng_col_guess = next((c for c in cols if "경도" in c or c.lower() in ("lng", "lon")), None)
-    use_existing_coords = st.checkbox(
-        "파일에 이미 위·경도가 있으면 재지오코딩 없이 사용", value=bool(lat_col_guess and lng_col_guess)
-    )
+        cols = list(df.columns)
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            name_col = st.selectbox("이름(주소지) 컬럼", cols, index=0)
+        with pc2:
+            addr_col = st.selectbox(
+                "지오코딩에 사용할 주소 컬럼", cols, index=min(3, len(cols) - 1)
+            )
+        lat_col_guess = next((c for c in cols if "위도" in c or c.lower() == "lat"), None)
+        lng_col_guess = next((c for c in cols if "경도" in c or c.lower() in ("lng", "lon")), None)
+        use_existing_coords = st.checkbox(
+            "파일에 이미 위·경도가 있으면 재지오코딩 없이 사용", value=bool(lat_col_guess and lng_col_guess)
+        )
 
-    run = st.button("🚀 노선 생성 (실제 지오코딩 · 실도로거리 계산)", type="primary", disabled=not has_keys())
+        run = st.button("🚀 노선 생성 (실제 지오코딩 · 실도로거리 계산)", type="primary",
+                         disabled=not has_keys(), use_container_width=True)
 
     if run:
         # 1) 소방서 좌표
@@ -368,6 +437,36 @@ if "route_results" in st.session_state:
     far_points = st.session_state["far_points"]
 
     st.header("📍 노선별 결과")
+
+    # ---- 엑셀(xlsx) 다운로드: 관리자가 받아서 담당 조·조원 등을 직접 채워 넣을 수 있도록 ----
+    xlsx_rows = []
+    for rr in route_results:
+        for i, leg in enumerate(rr["legs"], start=1):
+            xlsx_rows.append({
+                "노선": f"노선 {rr['route_no']}", "순번": i, "목적지": leg["to"],
+                "구간거리(km)": round(leg["km"], 1), "구간시간(분)": round(leg["min"]),
+                "담당 조 이름": "", "조원": "",
+            })
+        xlsx_rows.append({
+            "노선": f"노선 {rr['route_no']}", "순번": "", "목적지": f"복귀 ({station['name']})",
+            "구간거리(km)": round(rr["back_km"], 1), "구간시간(분)": round(rr["back_min"]),
+            "담당 조 이름": "", "조원": "",
+        })
+    for p in far_points:
+        xlsx_rows.append({
+            "노선": "장거리 별도", "순번": "", "목적지": p["name"],
+            "구간거리(km)": p.get("도로거리_km", ""), "구간시간(분)": "",
+            "담당 조 이름": "", "조원": "",
+        })
+    xlsx_buf = io.BytesIO()
+    pd.DataFrame(xlsx_rows).to_excel(xlsx_buf, index=False, engine="openpyxl")
+    st.download_button(
+        "📥 전체 노선 엑셀(xlsx)로 다운로드",
+        data=xlsx_buf.getvalue(),
+        file_name=f"{station['name']}_순찰노선.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
     for rr in route_results:
         with st.expander(f"노선 {rr['route_no']} — {len(rr['stops'])}개소 · "
                           f"총 {rr['total_km']:.1f}km · 약 {rr['total_min']:.0f}분", expanded=True):
